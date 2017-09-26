@@ -13,18 +13,31 @@ import qualified Brick.Widgets.Core         as C
 import           Brick.Widgets.List         (List, handleListEvent, list,
                                              listMoveDown, listMoveUp,
                                              renderList)
-import           Data.Vector                hiding ((++))
+import           Control.Exception
+import           Control.Monad
+import qualified Data.List                  as List
+import           Data.Vector                hiding (mapM, (++))
 import qualified Graphics.Vty               as V
 import           Lens.Micro                 (over, set)
 import           Lens.Micro.TH              (makeLenses)
+import           Prelude                    hiding (map)
+import           SDL.Init                   (InitFlag (InitAudio))
+import qualified SDL.Init
+import           SDL.Mixer                  (Music, defaultAudio, load,
+                                             playMusic, withAudio)
 import           System.Console.CmdArgs
 import           System.Directory           (listDirectory)
 
 import           Lib
 
+data ListItem = ListItem
+  { filePath :: FilePath
+  , music    :: Either SomeException Music
+  }
+
 data State = State
   { _curPath   :: FilePath
-  , _filesList :: List String String
+  , _filesList :: List String ListItem
   }
 makeLenses ''State
 
@@ -35,15 +48,15 @@ defaultCliArgs = CliArgs
   { pathArg = "." &= args &= typ "DIRECTORY"
   , flatten = False }
 
-renderFilesList :: List String String -> Widget String
+renderFilesList :: List String ListItem -> Widget String
 renderFilesList listState =
   renderList render True listState
   where
-    render selected str =
+    render selected listItem =
       C.vLimit 1 $ C.hBox [
         C.str (if selected then "+" else "*")
       , vBorder
-      , C.str str
+      , C.str (filePath listItem)
       ]
 
 draw :: State -> [Widget String]
@@ -73,14 +86,19 @@ handleEvent state (VtyEvent e) = do
 startEvent :: State -> EventM String State
 startEvent state = return state
 
-main :: IO ()
-main = do
+filePathToListItem fp = do
+  -- TODO(rofer): Handle this exception more elegantly
+  loadedMusic <- try $ load fp
+  return $ ListItem { filePath = fp , music = loadedMusic }
+
+mainWithAudio = do
   cliArgs <- cmdArgs defaultCliArgs
   let dirPath = pathArg cliArgs
-  files <- listDirectory dirPath
+  filePaths <- listDirectory dirPath
+  listItems <- mapM filePathToListItem filePaths
   let initialState = State {
       _curPath = dirPath
-    , _filesList = list "filesList" (fromList files) 1
+    , _filesList = list "filesList" (fromList listItems) 1
     }
   let app = App {
       appDraw = draw
@@ -91,3 +109,8 @@ main = do
     }
   finalState <- defaultMain app initialState
   print cliArgs
+
+main :: IO ()
+main = do
+  SDL.Init.initialize [InitAudio]
+  withAudio defaultAudio 512 mainWithAudio

@@ -32,6 +32,8 @@ executable sample-browse-exe
                      , microlens
                      , microlens-th
                      , directory
+                     , sdl2
+                     , sdl2-mixer
   default-language:    Haskell2010
 
 test-suite sample-browse-test
