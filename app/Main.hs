@@ -1,28 +1,29 @@
-{-# LANGUAGE TemplateHaskell, DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell    #-}
 {-# OPTIONS_GHC -fno-cse #-}
 module Main where
 
-import Brick
-  ( App(..), AttrMap, BrickEvent(..), EventM, Next, Widget, CursorLocation
-  , defaultMain
-  , continue, halt
-  , str
-  , attrMap
-  )
-import Brick.Widgets.Border ( borderWithLabel, hBorder, vBorder )
-import Brick.Widgets.List ( List, list, renderList, handleListEvent )
-import Brick.Widgets.Border.Style ( ascii )
-import qualified Brick.Widgets.Core as C
-import qualified Graphics.Vty as V
-import Data.Vector hiding ( (++) )
-import Lens.Micro.TH ( makeLenses )
-import Lens.Micro ( set, over )
-import System.Console.CmdArgs
+import           Brick                      (App (..), AttrMap, BrickEvent (..),
+                                             CursorLocation, EventM, Next,
+                                             Widget, attrMap, continue,
+                                             defaultMain, halt, str)
+import           Brick.Widgets.Border       (borderWithLabel, hBorder, vBorder)
+import           Brick.Widgets.Border.Style (ascii)
+import qualified Brick.Widgets.Core         as C
+import           Brick.Widgets.List         (List, handleListEvent, list,
+                                             listMoveDown, listMoveUp,
+                                             renderList)
+import           Data.Vector                hiding ((++))
+import qualified Graphics.Vty               as V
+import           Lens.Micro                 (over, set)
+import           Lens.Micro.TH              (makeLenses)
+import           System.Console.CmdArgs
+import           System.Directory           (listDirectory)
 
-import Lib
+import           Lib
 
-data State = State 
-  { _curPath :: FilePath 
+data State = State
+  { _curPath   :: FilePath
   , _filesList :: List String String
   }
 makeLenses ''State
@@ -60,6 +61,9 @@ chooseCursor state _ = Nothing
 handleEvent :: State -> BrickEvent String () -> EventM String (Next State)
 handleEvent state (VtyEvent (V.EvKey V.KEsc [])) = halt state
 handleEvent state (VtyEvent (V.EvKey (V.KChar 'q') [])) = halt state
+-- Add in vim keys
+handleEvent state (VtyEvent (V.EvKey (V.KChar 'j') [])) = continue $ over filesList listMoveDown state
+handleEvent state (VtyEvent (V.EvKey (V.KChar 'k') [])) = continue $ over filesList listMoveUp state
 -- I can probably do this more simply, but I'm not sure how yet.
 handleEvent state (VtyEvent e) = do
   newList <- handleListEvent e (_filesList state)
@@ -72,9 +76,11 @@ startEvent state = return state
 main :: IO ()
 main = do
   cliArgs <- cmdArgs defaultCliArgs
+  let dirPath = pathArg cliArgs
+  files <- listDirectory dirPath
   let initialState = State {
-      _curPath = pathArg cliArgs
-    , _filesList = list "filesList" (generate 10 show) 1
+      _curPath = dirPath
+    , _filesList = list "filesList" (fromList files) 1
     }
   let app = App {
       appDraw = draw
