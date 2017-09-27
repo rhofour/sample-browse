@@ -34,6 +34,7 @@ executable sample-browse-exe
                      , directory
                      , sdl2
                      , sdl2-mixer
+                     , filepath
   default-language:    Haskell2010
 
 test-suite sample-browse-test

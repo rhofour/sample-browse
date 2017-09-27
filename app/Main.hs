@@ -33,6 +33,8 @@ import           SDL.Mixer                  (pattern AllChannels, Chunk,
 import qualified SDL.Mixer                  (halt)
 import           System.Console.CmdArgs
 import           System.Directory           (listDirectory)
+import           System.FilePath            (takeFileName)
+import qualified System.FilePath            as Filepath
 
 import           Lib
 
@@ -62,7 +64,7 @@ renderFilesList listState =
       C.vLimit 1 $ C.hBox [
         C.str (if selected then "+" else (if isJust $ chunk listItem then "*" else "o"))
       , vBorder
-      , C.str (filePath listItem)
+      , C.str (takeFileName $ filePath listItem)
       ]
 
 draw :: State -> [Widget String]
@@ -113,7 +115,7 @@ filePathToListItem fp = do
 mainWithAudio = do
   cliArgs <- cmdArgs defaultCliArgs
   let dirPath = pathArg cliArgs
-  filePaths <- listDirectory dirPath
+  filePaths <- (fmap $ Filepath.combine dirPath) <$> listDirectory dirPath
   listItems <- mapM filePathToListItem filePaths
   let initialState = State {
       _curPath = dirPath
