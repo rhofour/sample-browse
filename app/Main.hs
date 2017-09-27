@@ -1,5 +1,7 @@
-{-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE TemplateHaskell    #-}
+{-# LANGUAGE DeriveDataTypeable  #-}
+{-# LANGUAGE PatternSynonyms     #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell     #-}
 {-# OPTIONS_GHC -fno-cse #-}
 module Main where
 
@@ -12,19 +14,23 @@ import           Brick.Widgets.Border.Style (ascii)
 import qualified Brick.Widgets.Core         as C
 import           Brick.Widgets.List         (List, handleListEvent, list,
                                              listMoveDown, listMoveUp,
-                                             renderList)
+                                             listSelectedElement, renderList)
 import           Control.Exception
 import           Control.Monad
 import qualified Data.List                  as List
+import           Data.Maybe                 (isJust)
 import           Data.Vector                hiding (mapM, (++))
 import qualified Graphics.Vty               as V
-import           Lens.Micro                 (over, set)
+import           Lens.Micro                 (over, set, (^.))
 import           Lens.Micro.TH              (makeLenses)
 import           Prelude                    hiding (map)
+import           SDL.Exception              (SDLException (..))
 import           SDL.Init                   (InitFlag (InitAudio))
 import qualified SDL.Init
-import           SDL.Mixer                  (Music, defaultAudio, load,
-                                             playMusic, withAudio)
+import           SDL.Mixer                  (pattern AllChannels, Chunk,
+                                             defaultAudio, load, play,
+                                             withAudio)
+import qualified SDL.Mixer                  (halt)
 import           System.Console.CmdArgs
 import           System.Directory           (listDirectory)
 
@@ -32,7 +38,7 @@ import           Lib
 
 data ListItem = ListItem
   { filePath :: FilePath
-  , music    :: Either SomeException Music
+  , chunk    :: Maybe Chunk
   }
 
 data State = State
@@ -54,7 +60,7 @@ renderFilesList listState =
   where
     render selected listItem =
       C.vLimit 1 $ C.hBox [
-        C.str (if selected then "+" else "*")
+        C.str (if selected then "+" else (if isJust $ chunk listItem then "*" else "o"))
       , vBorder
       , C.str (filePath listItem)
       ]
@@ -71,8 +77,18 @@ draw state =
 chooseCursor :: State -> [CursorLocation String] -> Maybe (CursorLocation String)
 chooseCursor state _ = Nothing
 
+playSample :: Chunk -> EventM String ()
+playSample chunk = do
+  SDL.Mixer.halt AllChannels
+  play chunk
+
 handleEvent :: State -> BrickEvent String () -> EventM String (Next State)
 handleEvent state (VtyEvent (V.EvKey V.KEsc [])) = halt state
+handleEvent state (VtyEvent (V.EvKey V.KEnter [])) = continue =<< do
+  case (listSelectedElement $ state ^. filesList) of
+    Just (_, ListItem {chunk=Just chunk}) -> playSample chunk
+    _                                     -> return ()
+  return state
 handleEvent state (VtyEvent (V.EvKey (V.KChar 'q') [])) = halt state
 -- Add in vim keys
 handleEvent state (VtyEvent (V.EvKey (V.KChar 'j') [])) = continue $ over filesList listMoveDown state
@@ -86,10 +102,13 @@ handleEvent state (VtyEvent e) = do
 startEvent :: State -> EventM String State
 startEvent state = return state
 
+filePathToListItem :: FilePath -> IO ListItem
 filePathToListItem fp = do
-  -- TODO(rofer): Handle this exception more elegantly
-  loadedMusic <- try $ load fp
-  return $ ListItem { filePath = fp , music = loadedMusic }
+  loadedChunk <- (print fp >> Just <$> load fp) `catches` [
+      Handler (\(SDLCallFailed _ _ _) -> return Nothing)
+    , Handler (\(ex :: IOException) -> return Nothing)
+    ]
+  return $ ListItem { filePath = fp , chunk = loadedChunk }
 
 mainWithAudio = do
   cliArgs <- cmdArgs defaultCliArgs
