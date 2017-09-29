@@ -49,12 +49,13 @@ data State = State
   }
 makeLenses ''State
 
-data CliArgs = CliArgs { pathArg :: FilePath, flatten :: Bool }
+data CliArgs = CliArgs { pathArg :: FilePath, flatten :: Bool, showAll :: Bool }
   deriving (Show, Data, Typeable)
 
 defaultCliArgs = CliArgs
   { pathArg = "." &= args &= typ "DIRECTORY"
-  , flatten = False }
+  , flatten = False
+  , showAll = False }
 
 renderFilesList :: List String ListItem -> Widget String
 renderFilesList listState =
@@ -131,9 +132,10 @@ mainWithAudio = do
   let recursionDepth = if flatten cliArgs then 100 else 1
   filePaths <- listFilesRecursively recursionDepth dirPath
   listItems <- mapM (filePathToListItem (length dirPath)) filePaths
+  let listItems' = if (showAll cliArgs) then listItems else filter (isJust . chunk) listItems
   let initialState = State {
       _curPath = dirPath
-    , _filesList = list "filesList" (V.fromList listItems) 1
+    , _filesList = list "filesList" (V.fromList listItems') 1
     }
   let app = App {
       appDraw = draw
