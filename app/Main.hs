@@ -64,7 +64,7 @@ renderFilesList listState =
       C.vLimit 1 $ C.hBox [
         C.str (if selected then "+" else (if isJust $ chunk listItem then "*" else "o"))
       , vBorder
-      , C.str (takeFileName $ filePath listItem)
+      , C.str (filePath listItem)
       ]
 
 draw :: State -> [Widget String]
@@ -104,13 +104,16 @@ handleEvent state (VtyEvent e) = do
 startEvent :: State -> EventM String State
 startEvent state = return state
 
-filePathToListItem :: FilePath -> IO ListItem
-filePathToListItem fp = do
+-- Load a chunk if possible and shorten the filepaths
+filePathToListItem :: Int -> FilePath -> IO ListItem
+filePathToListItem curDirLen fp = do
   loadedChunk <- (print fp >> Just <$> load fp) `catches` [
       Handler (\(SDLCallFailed _ _ _) -> return Nothing)
     , Handler (\(ex :: IOException) -> return Nothing)
     ]
-  return $ ListItem { filePath = fp , chunk = loadedChunk }
+  return $ ListItem {
+     filePath = drop curDirLen fp
+   , chunk = loadedChunk }
 
 listFilesRecursively :: Int -> FilePath -> IO [FilePath]
 listFilesRecursively 0 baseDir = return [baseDir]
@@ -127,7 +130,7 @@ mainWithAudio = do
   let dirPath = pathArg cliArgs
   let recursionDepth = if flatten cliArgs then 100 else 1
   filePaths <- listFilesRecursively recursionDepth dirPath
-  listItems <- mapM filePathToListItem filePaths
+  listItems <- mapM (filePathToListItem (length dirPath)) filePaths
   let initialState = State {
       _curPath = dirPath
     , _filesList = list "filesList" (V.fromList listItems) 1
