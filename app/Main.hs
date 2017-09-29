@@ -19,8 +19,8 @@ import           Control.Exception
 import           Control.Monad
 import qualified Data.List                  as List
 import           Data.Maybe                 (isJust)
-import           Data.Vector                hiding (mapM, (++))
-import qualified Graphics.Vty               as V
+import qualified Data.Vector                as V
+import qualified Graphics.Vty               as Vty
 import           Lens.Micro                 (over, set, (^.))
 import           Lens.Micro.TH              (makeLenses)
 import           Prelude                    hiding (map)
@@ -32,7 +32,7 @@ import           SDL.Mixer                  (pattern AllChannels, Chunk,
                                              withAudio)
 import qualified SDL.Mixer                  (halt)
 import           System.Console.CmdArgs
-import           System.Directory           (listDirectory)
+import           System.Directory           (doesDirectoryExist, listDirectory)
 import           System.FilePath            (takeFileName)
 import qualified System.FilePath            as Filepath
 
@@ -85,16 +85,16 @@ playSample chunk = do
   play chunk
 
 handleEvent :: State -> BrickEvent String () -> EventM String (Next State)
-handleEvent state (VtyEvent (V.EvKey V.KEsc [])) = halt state
-handleEvent state (VtyEvent (V.EvKey V.KEnter [])) = continue =<< do
+handleEvent state (VtyEvent (Vty.EvKey Vty.KEsc [])) = halt state
+handleEvent state (VtyEvent (Vty.EvKey Vty.KEnter [])) = continue =<< do
   case (listSelectedElement $ state ^. filesList) of
     Just (_, ListItem {chunk=Just chunk}) -> playSample chunk
     _                                     -> return ()
   return state
-handleEvent state (VtyEvent (V.EvKey (V.KChar 'q') [])) = halt state
+handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar 'q') [])) = halt state
 -- Add in vim keys
-handleEvent state (VtyEvent (V.EvKey (V.KChar 'j') [])) = continue $ over filesList listMoveDown state
-handleEvent state (VtyEvent (V.EvKey (V.KChar 'k') [])) = continue $ over filesList listMoveUp state
+handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar 'j') [])) = continue $ over filesList listMoveDown state
+handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar 'k') [])) = continue $ over filesList listMoveUp state
 -- I can probably do this more simply, but I'm not sure how yet.
 handleEvent state (VtyEvent e) = do
   newList <- handleListEvent e (_filesList state)
@@ -112,21 +112,32 @@ filePathToListItem fp = do
     ]
   return $ ListItem { filePath = fp , chunk = loadedChunk }
 
+listFilesRecursively :: Int -> FilePath -> IO [FilePath]
+listFilesRecursively 0 baseDir = return [baseDir]
+listFilesRecursively n baseDir = do
+  isDir <- doesDirectoryExist baseDir
+  case isDir of
+    False -> return [baseDir]
+    True -> do
+      newDirs <- (fmap $ Filepath.combine baseDir) <$> listDirectory baseDir
+      fmap concat $ mapM (listFilesRecursively (n-1)) newDirs
+
 mainWithAudio = do
   cliArgs <- cmdArgs defaultCliArgs
   let dirPath = pathArg cliArgs
-  filePaths <- (fmap $ Filepath.combine dirPath) <$> listDirectory dirPath
+  let recursionDepth = if flatten cliArgs then 100 else 1
+  filePaths <- listFilesRecursively recursionDepth dirPath
   listItems <- mapM filePathToListItem filePaths
   let initialState = State {
       _curPath = dirPath
-    , _filesList = list "filesList" (fromList listItems) 1
+    , _filesList = list "filesList" (V.fromList listItems) 1
     }
   let app = App {
       appDraw = draw
     , appChooseCursor = chooseCursor
     , appHandleEvent = handleEvent
     , appStartEvent = startEvent
-    , appAttrMap = const $ attrMap V.defAttr []
+    , appAttrMap = const $ attrMap Vty.defAttr []
     }
   finalState <- defaultMain app initialState
   print cliArgs
