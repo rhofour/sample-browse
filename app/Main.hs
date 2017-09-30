@@ -85,13 +85,18 @@ playSample chunk = do
   SDL.Mixer.halt AllChannels
   play chunk
 
-handleEvent :: State -> BrickEvent String () -> EventM String (Next State)
-handleEvent state (VtyEvent (Vty.EvKey Vty.KEsc [])) = halt state
-handleEvent state (VtyEvent (Vty.EvKey Vty.KEnter [])) = continue =<< do
+playSampleIfPossible :: State -> EventM String (Next State)
+playSampleIfPossible state = continue =<< do
   case (listSelectedElement $ state ^. filesList) of
     Just (_, ListItem {chunk=Just chunk}) -> playSample chunk
     _                                     -> return ()
   return state
+
+
+handleEvent :: State -> BrickEvent String () -> EventM String (Next State)
+handleEvent state (VtyEvent (Vty.EvKey Vty.KEsc [])) = halt state
+handleEvent state (VtyEvent (Vty.EvKey Vty.KEnter [])) = playSampleIfPossible state
+handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar ' ') [])) = playSampleIfPossible state
 handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar 'q') [])) = halt state
 -- Add in vim keys
 handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar 'j') [])) = continue $ over filesList listMoveDown state
