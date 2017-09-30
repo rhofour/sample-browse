@@ -98,6 +98,7 @@ handleEvent state (VtyEvent (Vty.EvKey Vty.KEsc [])) = halt state
 handleEvent state (VtyEvent (Vty.EvKey Vty.KEnter [])) = playSampleIfPossible state
 handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar ' ') [])) = playSampleIfPossible state
 handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar 'q') [])) = halt state
+handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl])) = halt state
 -- Add in vim keys
 handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar 'j') [])) = continue $ over filesList listMoveDown state
 handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar 'k') [])) = continue $ over filesList listMoveUp state
