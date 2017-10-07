@@ -12,7 +12,8 @@ import           Brick                      (App (..), AttrMap, BrickEvent (..),
 import           Brick.Widgets.Border       (borderWithLabel, hBorder, vBorder)
 import           Brick.Widgets.Border.Style (ascii)
 import qualified Brick.Widgets.Core         as C
-import           Brick.Widgets.List         (List, handleListEvent, list,
+import           Brick.Widgets.List         (List, handleListEvent,
+                                             handleListEventVi, list,
                                              listMoveDown, listMoveUp,
                                              listSelectedElement, renderList)
 import           Control.Exception
@@ -99,12 +100,9 @@ handleEvent state (VtyEvent (Vty.EvKey Vty.KEnter [])) = playSampleIfPossible st
 handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar ' ') [])) = playSampleIfPossible state
 handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar 'q') [])) = halt state
 handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar 'c') [Vty.MCtrl])) = halt state
--- Add in vim keys
-handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar 'j') [])) = continue $ over filesList listMoveDown state
-handleEvent state (VtyEvent (Vty.EvKey (Vty.KChar 'k') [])) = continue $ over filesList listMoveUp state
 -- I can probably do this more simply, but I'm not sure how yet.
 handleEvent state (VtyEvent e) = do
-  newList <- handleListEvent e (_filesList state)
+  newList <- (handleListEventVi handleListEvent) e (_filesList state)
   let newState = set filesList newList state
   continue newState
 
@@ -115,8 +113,8 @@ startEvent state = return state
 filePathToListItem :: Int -> FilePath -> IO ListItem
 filePathToListItem curDirLen fp = do
   loadedChunk <- (print fp >> Just <$> load fp) `catches` [
-      Handler (\(SDLCallFailed _ _ _) -> return Nothing)
-    , Handler (\(ex :: IOException) -> return Nothing)
+      Handler (\(SDLCallFailed _ _ errTxt) -> (print $ "SDL failed: " ++ (show errTxt)) >> return Nothing)
+    , Handler (\(ex :: IOException) -> (print "IO exception.") >> return Nothing)
     ]
   return $ ListItem {
      filePath = drop curDirLen fp
